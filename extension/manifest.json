@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AdGuard",
   "version": "1.0.0",
-  "description": "A custom-engineered, ultra-lightweight Manifest V3 ad blocker. Instantly blocks intrusive ads, trackers, and YouTube video payloads.",
+  "description": "Block ads on YouTube and your  sites for free.",
   "permissions": [
     "declarativeNetRequest",
     "declarativeNetRequestFeedback",

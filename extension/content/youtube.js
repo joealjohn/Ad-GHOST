@@ -80,8 +80,6 @@
         }
       }
 
-      const adContainer = player.querySelector('.video-ads');
-      if (adContainer) adContainer.style.display = 'none';
 
       if (!lastAdState) {
         reportBlocked();

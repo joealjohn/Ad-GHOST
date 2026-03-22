@@ -12,23 +12,20 @@
     if (document.getElementById('adguard-yt-cosmetic')) return;
     const style = document.createElement('style');
     style.id = 'adguard-yt-cosmetic';
-    // Deep selectors for homepage promoted posts, search ads, and banners
     style.textContent = `
-      ytd-rich-item-renderer:has(.ytd-ad-slot-renderer),
-      ytd-rich-item-renderer:has(ytd-ad-slot-renderer),
-      ytd-rich-item-renderer:has(ytd-in-feed-ad-layout-renderer),
-      ytd-in-feed-ad-layout-renderer,
       ytd-ad-slot-renderer,
-      ytd-search-pyv-renderer,
-      ytd-promoted-sparkles-web-renderer,
-      ytd-promoted-sparkles-text-search-renderer,
+      ytd-rich-item-renderer:has(ytd-ad-slot-renderer),
+      ytd-in-feed-ad-layout-renderer,
+      ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
       #masthead-ad,
       ytd-banner-promo-renderer,
       ytd-statement-banner-renderer,
-      .ytd-promoted-video-renderer,
-      .ytd-promoted-sparkles-web-renderer {
-        display: none !important;
-      }
+      ytd-promoted-sparkles-web-renderer,
+      ytd-search-pyv-renderer,
+      ytd-action-companion-ad-renderer,
+      .ytd-player-legacy-desktop-watch-ads-renderer,
+      #player-ads
+      { display: none !important; }
     `;
     (document.head || document.documentElement).appendChild(style);
   }
@@ -66,15 +63,12 @@
     const popups = document.querySelectorAll('ytd-enforcement-message-view-model, tp-yt-iron-overlay-backdrop');
     if (popups.length > 0) {
       popups.forEach(el => el.remove());
-      // Fix body scroll lock
       if (document.body && document.body.style.overflow === 'hidden') {
         document.body.style.overflow = '';
       }
-      // Hide fatal error screen if it triggers
       const errorScreen = document.querySelector('.ytp-error');
       if (errorScreen) errorScreen.style.display = 'none';
 
-      // Resume main video
       const videos = document.querySelectorAll('video');
       videos.forEach(video => {
         if (video.paused && video.readyState > 0) {
@@ -83,25 +77,19 @@
       });
     }
 
-    // 2. Ultra-fast ad skip
-    const isAd = document.querySelector('.ad-showing');
-    if (isAd) {
-      // ONLY target the main video player, not hidden tracking videos
-      const video = document.querySelector('.html5-main-video');
-      if (video && !isNaN(video.duration)) {
+    // 2. Ultra-stable Ad Speedup & Skip
+    const player = document.querySelector('.html5-video-player');
+    if (player && player.classList.contains('ad-showing')) {
+      const video = document.querySelector('video');
+      if (video) {
+        // Mute and turbo-speed the video.
+        // We DO NOT touch video.currentTime because rapidly modifying the timestamps
+        // causes the player to freeze in a permanent buffering state.
         video.muted = true;
-        video.playbackRate = 16;
-        
-        // CRITICAL BUGFIX: Never scrub to exact 'video.duration'.
-        // Doing so often causes YouTube's MSE buffer to hang indefinitely
-        // waiting for non-existent chunk data, resulting in a black screen.
-        // Leaving a 0.1s buffer allows native 'ended' events to fire smoothly.
-        if (video.currentTime < video.duration - 0.5) {
-          video.currentTime = video.duration - 0.1;
-        }
+        try { video.playbackRate = 16; } catch {}
       }
 
-      // Spam click any skip buttons
+      // Spam click any skip buttons the millisecond they render
       const skipSelectors = [
         '.ytp-skip-ad-button',
         '.ytp-ad-skip-button',

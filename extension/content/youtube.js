@@ -15,6 +15,7 @@
     const style = document.createElement('style');
     style.id = 'adguard-yt-cosmetic';
     style.textContent = `
+      /* Cosmetic Ad Hiding */
       ytd-ad-slot-renderer,
       ytd-rich-item-renderer:has(ytd-ad-slot-renderer),
       ytd-rich-item-renderer:has(.badge-style-type-ad),
@@ -30,6 +31,30 @@
       ytd-search-pyv-renderer,
       ytd-action-companion-ad-renderer
       { display: none !important; }
+
+      /* Ghost Mode Blackout Shield: Hides the 16x fast-forward flicker */
+      .html5-video-player.ad-showing video {
+        opacity: 0 !important;
+      }
+      .html5-video-player.ad-showing::after {
+        content: "Skipping Ad...";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #000 !important;
+        color: #fff !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        font-weight: bold;
+        font-family: 'Roboto', Arial, sans-serif;
+        z-index: 999999 !important;
+        pointer-events: none !important;
+        letter-spacing: 1.5px;
+      }
     `;
     (document.head || document.documentElement).appendChild(style);
   }

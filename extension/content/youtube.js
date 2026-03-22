@@ -61,25 +61,23 @@
    * Skip video ads by fast-forwarding to end
    */
   function skipVideoAds() {
-    const player = document.querySelector('.html5-video-player');
-    if (!player) return;
+    const video = document.querySelector('video.video-stream, video.html5-main-video');
+    const adContainer = document.querySelector('.video-ads.ytp-ad-module, .video-ads');
+    
+    if (!video || !adContainer) return;
 
-    // Bulletproof Ad Validation: Ensures the 'ad-showing' class isn't just lingering during a main video buffer
-    const isAd = player.classList.contains('ad-showing') && 
-                 player.querySelector('.ytp-ad-player-overlay, .ytp-ad-text, .video-ads');
+    // Bulletproof Ad Validation: YouTube physically injects node elements into .video-ads ONLY when an ad is actively playing
+    // This entirely avoids the "lingering .ad-showing class" bug while surviving YouTube's A/B class renaming!
+    const isAd = adContainer.children.length > 0;
 
     if (isAd) {
-      const video = player.querySelector('video');
-      if (video) {
-        video.muted = true;
-        // Fast Human Bypass: Instantly scrub the physical video element timeline.
-        // YouTube cannot penalize accounts for this since scrubbing is exactly what humans physically do.
-        if (!isNaN(video.duration) && video.currentTime < video.duration - 1.0) {
-          video.currentTime = video.duration - 0.1;
-          video.playbackRate = 16.0;
-        }
+      video.muted = true;
+      
+      // Fast Human Bypass: Instantly scrub to the exact end of the payload
+      if (!isNaN(video.duration) && video.duration > 0 && video.currentTime < video.duration - 0.5) {
+        video.currentTime = video.duration - 0.1;
+        video.playbackRate = 16.0;
       }
-
 
       if (!lastAdState) {
         reportBlocked();
@@ -89,12 +87,9 @@
       clickSkipButton();
     } else {
       if (lastAdState) {
-        // Ad just ended — restore normal playback settings
-        const video = document.querySelector('.html5-video-player video');
-        if (video) {
-          video.muted = false;
-          try { video.playbackRate = 1; } catch {}
-        }
+        // Ad just ended — restore normal playback settings safely
+        video.muted = false;
+        try { video.playbackRate = 1; } catch {}
         lastAdState = false;
       }
     }

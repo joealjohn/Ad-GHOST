@@ -7,6 +7,8 @@
 (function() {
   'use strict';
 
+  let enabled = true;
+
   // Inject CSS to hide all cosmetic/feed ads on YouTube instantly
   function injectCosmeticCSS() {
     if (document.getElementById('adguard-yt-cosmetic')) return;
@@ -15,8 +17,12 @@
     style.textContent = `
       ytd-ad-slot-renderer,
       ytd-rich-item-renderer:has(ytd-ad-slot-renderer),
+      ytd-rich-item-renderer:has(.badge-style-type-ad),
+      ytd-rich-item-renderer:has(#ad-badge),
       ytd-in-feed-ad-layout-renderer,
       ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
+      ytd-compact-promoted-video-renderer,
+      ytd-compact-video-renderer:has(.badge-style-type-ad),
       #masthead-ad,
       ytd-banner-promo-renderer,
       ytd-statement-banner-renderer,

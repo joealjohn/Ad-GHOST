@@ -1,5 +1,5 @@
 /**
- * YouTube Ad Skipper — Ghost Mode v2
+ * YouTube Ad Skipper — Ghost Mode v3
  * Dual-strategy: (1) Auto-dismiss anti-adblock popups, (2) Fast-forward video ads.
  * Zero fingerprints. No custom attributes, no console, no CSS injection.
  */
@@ -34,35 +34,42 @@
 
   // ==========================================
   // STRATEGY 1: Auto-dismiss anti-adblock popup
+  // Only remove the DIALOG itself, never the player container
   // ==========================================
   function dismissAntiAdblockPopup() {
-    // Remove the enforcement message popup
-    const enforcementPopups = document.querySelectorAll(
-      'ytd-enforcement-message-view-model, ' +
-      'yt-playability-error-supported-renderers'
-    );
-    enforcementPopups.forEach(el => el.remove());
+    // Remove ONLY the enforcement message dialog — this is the actual popup
+    const popups = document.querySelectorAll('ytd-enforcement-message-view-model');
+    popups.forEach(el => el.remove());
 
-    // Remove the dark overlay backdrop
-    const backdrops = document.querySelectorAll(
-      'tp-yt-iron-overlay-backdrop, ' +
-      'tp-yt-paper-dialog'
-    );
-    backdrops.forEach(el => {
-      if (el.style.display !== 'none') {
+    // Remove the dark overlay backdrop (blocks interaction)
+    const backdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop');
+    backdrops.forEach(el => el.remove());
+
+    // Remove any paper dialogs related to enforcement
+    const dialogs = document.querySelectorAll('tp-yt-paper-dialog');
+    dialogs.forEach(el => {
+      // Only remove if it contains enforcement content
+      if (el.querySelector('ytd-enforcement-message-view-model') || 
+          el.textContent.includes('Ad blockers violate')) {
         el.remove();
       }
     });
 
-    // Remove body overflow restrictions that prevent scrolling
+    // Fix body scroll lock left behind by the dialog
     if (document.body) {
       document.body.style.overflow = '';
     }
 
-    // If the video was paused by the popup, resume it
+    // If the video player exists but video is paused, try to resume
     const video = document.querySelector('video');
-    if (video && video.paused && !video.ended) {
+    if (video && video.paused && !video.ended && video.readyState > 0) {
       try { video.play(); } catch {}
+    }
+
+    // If the playability error screen is showing, hide it so the player is visible
+    const errorScreen = document.querySelector('.ytp-error');
+    if (errorScreen) {
+      errorScreen.style.display = 'none';
     }
   }
 
@@ -140,7 +147,7 @@
   }
 
   // ==========================================
-  // Main loop — runs both strategies every 150ms
+  // Main loop
   // ==========================================
   function mainLoop() {
     if (!enabled) return;
@@ -151,18 +158,18 @@
     } catch {}
   }
 
-  // Also watch for dynamically inserted popups via MutationObserver
+  // Watch for dynamically inserted enforcement popups only
   const observer = new MutationObserver((mutations) => {
     if (!enabled) return;
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
         if (node.nodeType === 1) {
           const tag = node.tagName?.toLowerCase();
+          // Only remove the enforcement dialog and backdrop — NEVER the player
           if (tag === 'ytd-enforcement-message-view-model' ||
-              tag === 'tp-yt-iron-overlay-backdrop' ||
-              tag === 'yt-playability-error-supported-renderers') {
+              tag === 'tp-yt-iron-overlay-backdrop') {
             node.remove();
-            // Resume video after popup removal
+            // Try to resume video
             const video = document.querySelector('video');
             if (video && video.paused) {
               try { video.play(); } catch {}

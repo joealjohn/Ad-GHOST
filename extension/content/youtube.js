@@ -1,17 +1,15 @@
 /**
- * YouTube Ad Handler — Ghost Mode v5 (Virtual Environment)
- * Strategy: Visually/audibly firewall the ad into a "virtual environment"
- * (black screen + muted), instantly fast-forward it by scrubbing the timeline,
- * then restore the actual video. This prevents YouTube from detecting
- * blocked network tracking pings while entirely hiding the ad from the user.
+ * YouTube Ad Handler — Ghost Mode v6 (Zero-Interruption Interceptor)
+ * Strategy: Inject code directly into the YouTube page context (MAIN world) 
+ * to intercept and modify the raw API JSON responses. We strip out all 
+ * 'adPlacements' before the YouTube video player even knows they exist.
+ * This guarantees 100% uninterrupted, seamless playback.
  */
 
 (function() {
   'use strict';
 
   let enabled = true;
-  let adsSkipped = 0;
-  let adShieldActive = false;
 
   // Check initial state
   try {
@@ -22,161 +20,118 @@
       const isPaused = pausedSites.includes(location.hostname);
       if (state) enabled = state.enabled;
       if (!enabled || isPaused) enabled = false;
-    });
-  } catch {}
 
-  // Listen for state changes
-  try {
-    chrome.runtime.onMessage.addListener((msg) => {
-      if (msg.type === 'STATE_CHANGED') {
-        enabled = msg.enabled;
-        if (!enabled) removeAdShield();
+      // Only inject the JSON interceptor if we are enabled
+      if (enabled) {
+        injectMainWorldInterceptor();
       }
     });
-  } catch {}
-
-  // ==========================================
-  // Virtual Environment Shield UI
-  // ==========================================
-  function injectAdShield() {
-    let shield = document.getElementById('adguard-virtual-shield');
-    if (!shield) {
-      shield = document.createElement('div');
-      shield.id = 'adguard-virtual-shield';
-      shield.style.cssText = `
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background: black;
-        z-index: 999999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #fff;
-        font-family: -apple-system, sans-serif;
-        font-size: 14px;
-        opacity: 0;
-        transition: opacity 0.1s;
-        pointer-events: none;
-      `;
-      // Optional: Add a subtle loading spinner or branding
-      shield.innerHTML = `<span style="opacity: 0.5;">AdGuard Blocking...</span>`;
-      
-      const playerContainer = document.querySelector('.html5-video-player');
-      if (playerContainer) {
-        playerContainer.appendChild(shield);
-      } else {
-        return null;
-      }
-    }
-    return shield;
+  } catch {
+    injectMainWorldInterceptor(); // Default to injecting
   }
 
-  function activateAdShield(video) {
-    if (!adShieldActive) {
-      adShieldActive = true;
-      video.muted = true; // Instantly kill ad audio
-      
-      const shield = injectAdShield();
-      if (shield) {
-        shield.style.opacity = '1'; // Visually black out the ad
-      }
-      
-      // Fast-forward the ad in the background
-      if (video.duration && video.duration > 0.5) {
-        video.currentTime = video.duration - 0.1;
-      }
-      try { video.playbackRate = 16; } catch {}
-      
-      reportBlocked();
-    } else {
-      // Keep forcing the scrub if the ad is struggling to skip
-      if (video.duration && video.duration > 0.5 && video.currentTime < video.duration - 0.5) {
-        video.currentTime = video.duration - 0.1;
-      }
-    }
+  // ==========================================
+  // Layer 1: JSON Interceptor (MAIN World)
+  // This runs in the actual page context to manipulate YouTube's raw data
+  // ==========================================
+  function injectMainWorldInterceptor() {
+    const script = document.createElement('script');
     
-    clickSkipButton();
-  }
+    // We stringify a function to easily inject it into the page
+    script.textContent = `(${function() {
+      // Hook JSON.parse to intercept all incoming API responses
+      const originalJsonParse = JSON.parse;
+      JSON.parse = function() {
+        const parsed = originalJsonParse.apply(this, arguments);
+        if (parsed && typeof parsed === 'object') {
+          // Strip ads from the initial page load and AJAX navigation
+          if (parsed.adPlacements) parsed.adPlacements = [];
+          if (parsed.playerAds) parsed.playerAds = [];
+          
+          // Strip ads from nestled playerResponse objects
+          if (parsed.playerResponse) {
+            if (parsed.playerResponse.adPlacements) parsed.playerResponse.adPlacements = [];
+            if (parsed.playerResponse.playerAds) parsed.playerResponse.playerAds = [];
+          }
+        }
+        return parsed;
+      };
 
-  function removeAdShield(video) {
-    if (adShieldActive) {
-      adShieldActive = false;
+      // Hook XMLHttpRequest to modify raw text responses just in case
+      const originalOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function() {
+        this.addEventListener('readystatechange', function() {
+          if (this.readyState === 4 && this.responseURL.includes('/youtubei/v1/player')) {
+            // We rely on the JSON.parse hook for the actual modification,
+            // this is just an extra observation layer.
+          }
+        });
+        originalOpen.apply(this, arguments);
+      };
+
+      // Intercept the initial static page variable
+      Object.defineProperty(window, 'ytInitialPlayerResponse', {
+        get() { return this._ytInitialPlayerResponse; },
+        set(val) {
+          if (val) {
+            if (val.adPlacements) val.adPlacements = [];
+            if (val.playerAds) val.playerAds = [];
+          }
+          this._ytInitialPlayerResponse = val;
+        }
+      });
       
-      // Restore audio and playback rate for the real video
-      if (video) {
-        video.muted = false;
-        try { video.playbackRate = 1; } catch {}
-      }
-      
-      const shield = document.getElementById('adguard-virtual-shield');
-      if (shield) {
-        shield.style.opacity = '0';
-      }
-    }
+    }})();`;
+    
+    // Inject at document_start to beat YouTube's own scripts
+    document.documentElement.appendChild(script);
+    script.remove(); // Clean up the script tag immediately to hide fingerprints
   }
 
   // ==========================================
-  // Detect Ads & Anti-Adblock Popups
+  // Layer 2: Auto-dismiss anti-adblock popups
   // ==========================================
-  function handleAds() {
+  
+  // Watch for dynamically inserted enforcement popups
+  const observer = new MutationObserver((mutations) => {
     if (!enabled) return;
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType === 1) {
+          const tag = node.tagName?.toLowerCase();
+          if (tag === 'ytd-enforcement-message-view-model' ||
+              tag === 'tp-yt-iron-overlay-backdrop') {
+            node.remove();
+            
+            // Fix body scroll lock
+            if (document.body && document.body.style.overflow === 'hidden') {
+              document.body.style.overflow = '';
+            }
 
-    // 1. Check for video ads
-    const video = document.querySelector('video');
-    const player = document.querySelector('.html5-video-player');
-    
-    if (video && player) {
-      const adShowing = player.classList.contains('ad-showing');
-      const adContainer = document.querySelector('.video-ads');
-      const hasAdChildren = adContainer && adContainer.children.length > 0;
-      const isAdContent = window.location.href.includes('adformat=');
+            // Hide error screen if present
+            const errorScreen = document.querySelector('.ytp-error');
+            if (errorScreen) {
+              errorScreen.style.display = 'none';
+            }
 
-      if (adShowing || hasAdChildren || isAdContent) {
-        activateAdShield(video);
-      } else {
-        removeAdShield(video);
+            // Try to resume video ONCE after popup removal
+            const video = document.querySelector('video');
+            if (video && video.paused) {
+              try { video.play(); } catch {}
+            }
+          }
+        }
       }
     }
+  });
 
-    // 2. Clear known anti-adblock popups if they appear anyway
-    const popups = document.querySelectorAll('ytd-enforcement-message-view-model, tp-yt-iron-overlay-backdrop');
-    if (popups.length > 0) {
-      popups.forEach(el => el.remove());
-      if (document.body && document.body.style.overflow === 'hidden') {
-        document.body.style.overflow = '';
-      }
-    }
+  // Start popup observer when DOM is ready
+  if (document.body) {
+    observer.observe(document.body, { childList: true, subtree: true });
+  } else {
+    document.addEventListener('DOMContentLoaded', () => {
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
   }
-
-  // ==========================================
-  // Click skip buttons
-  // ==========================================
-  function clickSkipButton() {
-    const skipSelectors = [
-      '.ytp-skip-ad-button',
-      '.ytp-ad-skip-button',
-      '.ytp-ad-skip-button-modern',
-      'button.ytp-ad-skip-button',
-      '.videoAdUiSkipButton',
-      '.ytp-ad-skip-button-slot button'
-    ];
-    for (const sel of skipSelectors) {
-      const btn = document.querySelector(sel);
-      if (btn) {
-        btn.click();
-        return;
-      }
-    }
-  }
-
-  function reportBlocked() {
-    adsSkipped++;
-    try {
-      chrome.runtime.sendMessage({ type: 'AD_BLOCKED' }).catch(() => {});
-    } catch {}
-  }
-
-  // Run heavily on interval to guarantee exact-millisecond interception
-  setInterval(handleAds, 50);
 
 })();

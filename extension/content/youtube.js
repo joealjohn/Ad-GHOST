@@ -1,17 +1,29 @@
 /**
- * YouTube Ad Handler — Ghost Mode v6 (Zero-Interruption Interceptor)
- * Strategy: Inject code directly into the YouTube page context (MAIN world) 
- * to intercept and modify the raw API JSON responses. We strip out all 
- * 'adPlacements' before the YouTube video player even knows they exist.
- * This guarantees 100% uninterrupted, seamless playback.
+ * YouTube Ad Handler — Ghost Mode v8 (Synchronous Injection)
+ * Critical Fix: The interceptor MUST be injected synchronously before 
+ * chrome.storage checks, otherwise it loses the race against YouTube's 
+ * native scripts and the ads load anyway.
  */
 
 (function() {
   'use strict';
 
-  let enabled = true;
+  // ==========================================
+  // Layer 1: Synchronous Injection (CRITICAL)
+  // Run this absolutely first, before any async storage checks!
+  // ==========================================
+  try {
+    const script = document.createElement('script');
+    script.src = chrome.runtime.getURL('content/interceptor.js');
+    script.onload = function() { this.remove(); };
+    (document.head || document.documentElement).appendChild(script);
+  } catch (e) {}
 
-  // Check initial state
+  let enabled = true;
+  let adsSkipped = 0;
+  let lastAdState = false;
+
+  // Now we can do our async storage checks for the fallback loops
   try {
     chrome.storage.local.get(['state', 'pausedSites'], (data) => {
       if (chrome.runtime.lastError) return;
@@ -20,112 +32,120 @@
       const isPaused = pausedSites.includes(location.hostname);
       if (state) enabled = state.enabled;
       if (!enabled || isPaused) enabled = false;
+    });
+  } catch {}
 
-      // Only inject the JSON interceptor if we are enabled
-      if (enabled) {
-        injectMainWorldInterceptor();
+  try {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.type === 'STATE_CHANGED') {
+        enabled = msg.enabled;
       }
     });
-  } catch {
-    injectMainWorldInterceptor(); // Default to injecting
-  }
+  } catch {}
 
   // ==========================================
-  // Layer 1: JSON Interceptor (MAIN World)
-  // This runs in the actual page context to manipulate YouTube's raw data
+  // Layer 2: Ultra-Aggressive Fallback Scrubber
   // ==========================================
-  function injectMainWorldInterceptor() {
-    const script = document.createElement('script');
-    
-    // We stringify a function to easily inject it into the page
-    script.textContent = `(${function() {
-      // Hook JSON.parse to intercept all incoming API responses
-      const originalJsonParse = JSON.parse;
-      JSON.parse = function() {
-        const parsed = originalJsonParse.apply(this, arguments);
-        if (parsed && typeof parsed === 'object') {
-          // Strip ads from the initial page load and AJAX navigation
-          if (parsed.adPlacements) parsed.adPlacements = [];
-          if (parsed.playerAds) parsed.playerAds = [];
-          
-          // Strip ads from nestled playerResponse objects
-          if (parsed.playerResponse) {
-            if (parsed.playerResponse.adPlacements) parsed.playerResponse.adPlacements = [];
-            if (parsed.playerResponse.playerAds) parsed.playerResponse.playerAds = [];
-          }
-        }
-        return parsed;
-      };
-
-      // Hook XMLHttpRequest to modify raw text responses just in case
-      const originalOpen = XMLHttpRequest.prototype.open;
-      XMLHttpRequest.prototype.open = function() {
-        this.addEventListener('readystatechange', function() {
-          if (this.readyState === 4 && this.responseURL.includes('/youtubei/v1/player')) {
-            // We rely on the JSON.parse hook for the actual modification,
-            // this is just an extra observation layer.
-          }
-        });
-        originalOpen.apply(this, arguments);
-      };
-
-      // Intercept the initial static page variable
-      Object.defineProperty(window, 'ytInitialPlayerResponse', {
-        get() { return this._ytInitialPlayerResponse; },
-        set(val) {
-          if (val) {
-            if (val.adPlacements) val.adPlacements = [];
-            if (val.playerAds) val.playerAds = [];
-          }
-          this._ytInitialPlayerResponse = val;
-        }
-      });
-      
-    }})();`;
-    
-    // Inject at document_start to beat YouTube's own scripts
-    document.documentElement.appendChild(script);
-    script.remove(); // Clean up the script tag immediately to hide fingerprints
-  }
-
-  // ==========================================
-  // Layer 2: Auto-dismiss anti-adblock popups
-  // ==========================================
-  
-  // Watch for dynamically inserted enforcement popups
-  const observer = new MutationObserver((mutations) => {
+  function handleAdsFallback() {
     if (!enabled) return;
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType === 1) {
-          const tag = node.tagName?.toLowerCase();
-          if (tag === 'ytd-enforcement-message-view-model' ||
-              tag === 'tp-yt-iron-overlay-backdrop') {
-            node.remove();
-            
-            // Fix body scroll lock
-            if (document.body && document.body.style.overflow === 'hidden') {
-              document.body.style.overflow = '';
-            }
 
-            // Hide error screen if present
-            const errorScreen = document.querySelector('.ytp-error');
-            if (errorScreen) {
-              errorScreen.style.display = 'none';
-            }
+    const player = document.querySelector('.html5-video-player');
+    if (!player) return;
 
-            // Try to resume video ONCE after popup removal
-            const video = document.querySelector('video');
-            if (video && video.paused) {
-              try { video.play(); } catch {}
-            }
-          }
+    const adShowing = player.classList.contains('ad-showing');
+    const adContainer = document.querySelector('.video-ads');
+    const hasAdChildren = adContainer && adContainer.children.length > 0;
+    const isAdContent = window.location.href.includes('adformat=');
+
+    const isAd = adShowing || hasAdChildren || isAdContent;
+
+    // Grab ALL video elements (sometimes YouTube uses dual-video layers for ads)
+    const videos = document.querySelectorAll('video');
+
+    if (isAd) {
+      videos.forEach(video => {
+        video.muted = true; // Kill ad audio instantly
+        
+        // Scrub timeline to exactly 0.1s before the end
+        if (video.duration && video.duration > 0.5 && video.currentTime < video.duration - 0.5) {
+          video.currentTime = video.duration - 0.1;
         }
+        
+        // Force 16x speed to kill whatever milliseconds remain
+        try { video.playbackRate = 16; } catch {}
+      });
+
+      if (!lastAdState) {
+        reportBlocked();
+        lastAdState = true;
+      }
+
+      // Spam the skip buttons
+      clickSkipButton();
+    } else {
+      if (lastAdState) {
+        // Restore videos to normal
+        videos.forEach(video => {
+          video.muted = false;
+          try { video.playbackRate = 1; } catch {}
+        });
+        lastAdState = false;
       }
     }
+  }
+
+  function clickSkipButton() {
+    const skipSelectors = [
+      '.ytp-skip-ad-button',
+      '.ytp-ad-skip-button',
+      '.ytp-ad-skip-button-modern',
+      'button.ytp-ad-skip-button',
+      '.videoAdUiSkipButton',
+      '.ytp-ad-skip-button-slot button'
+    ];
+    for (const sel of skipSelectors) {
+      const btn = document.querySelector(sel);
+      if (btn) {
+        btn.click();
+        return;
+      }
+    }
+  }
+
+  function reportBlocked() {
+    adsSkipped++;
+    try {
+      chrome.runtime.sendMessage({ type: 'AD_BLOCKED' }).catch(() => {});
+    } catch {}
+  }
+
+  // ==========================================
+  // Layer 3: Popups
+  // ==========================================
+  function dismissPopups() {
+    const popups = document.querySelectorAll('ytd-enforcement-message-view-model, tp-yt-iron-overlay-backdrop');
+    if (popups.length > 0) {
+      popups.forEach(el => el.remove());
+      if (document.body && document.body.style.overflow === 'hidden') {
+        document.body.style.overflow = '';
+      }
+      const errorScreen = document.querySelector('.ytp-error');
+      if (errorScreen) errorScreen.style.display = 'none';
+
+      const videos = document.querySelectorAll('video');
+      videos.forEach(video => {
+        if (video.paused && video.readyState > 0) {
+          try { video.play(); } catch {}
+        }
+      });
+    }
+  }
+
+  const observer = new MutationObserver(() => {
+    if (!enabled) return;
+    dismissPopups();
   });
 
-  // Start popup observer when DOM is ready
   if (document.body) {
     observer.observe(document.body, { childList: true, subtree: true });
   } else {
@@ -133,5 +153,11 @@
       observer.observe(document.body, { childList: true, subtree: true });
     });
   }
+
+  // Fire fallback logic aggressively every 50ms
+  setInterval(() => {
+    handleAdsFallback();
+    dismissPopups();
+  }, 50);
 
 })();

@@ -65,18 +65,10 @@
       document.body.style.overflow = '';
     }
 
-    // Resume video ONLY right after we dismissed a popup — NOT continuously
-    if (popupJustDismissed) {
-      const video = document.querySelector('video');
-      if (video && video.paused && !video.ended) {
-        try { video.play(); } catch {}
-      }
-      // Hide error screen if present
-      const errorScreen = document.querySelector('.ytp-error');
-      if (errorScreen) {
-        errorScreen.style.display = 'none';
-      }
-      popupJustDismissed = false;
+    // Hide error screen if present
+    const errorScreen = document.querySelector('.ytp-error');
+    if (errorScreen) {
+      errorScreen.style.display = 'none';
     }
   }
 
@@ -132,11 +124,6 @@
           if (tag === 'ytd-enforcement-message-view-model' ||
               tag === 'tp-yt-iron-overlay-backdrop') {
             node.remove();
-            // Resume video ONCE after popup removal
-            const video = document.querySelector('video');
-            if (video && video.paused) {
-              try { video.play(); } catch {}
-            }
           }
         }
       }

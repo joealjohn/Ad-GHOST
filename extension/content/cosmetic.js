@@ -63,33 +63,28 @@
       style = document.createElement('style');
       style.id = 'adguard-cosmetic';
       style.textContent = `
-      /* Generic eXtreme Testing & Invasive Ads */
+      /* Generic eXtreme Testing & Universal Cosmetic Rules */
+      .ad, .ads, .ad-box, .ad-banner, .advertisement,
       .interstitial, .interstitial-ad, .overlay-ad,
       .push-ad, .in-page-push, .push-notification-ad,
       .native-ad, .sponsored-post, .promoted-post,
-      .banner-ad, .ad-banner, .advertisement,
-      .ad-container, .ad-slot, .ad-wrapper, .ad-box,
+      .banner-ad, .ad-container, .ad-slot, .ad-wrapper,
       .popunder, .popunder-ad, .pop-under,
-      div[id*="GoogleActiveViewElement"],
-      iframe[name*="doubleclick"],
-      a[href*="/ad.php"], a[href*="/click.php?ad="] {
-        position: absolute !important;
-        left: -10000px !important;
-        top: -10000px !important;
-        width: 1px !important;
-        height: 1px !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-        z-index: -9999 !important;
-      }
-
-      /* Google Ads */
-      ins.adsbygoogle,
-      .adsbygoogle,
+      [id^="ad-"], [class^="ad-"],
+      [id*="-ad-"], [class*="-ad-"],
+      [id$="-ad"], [class$="-ad"],
+      [id^="banner-"], [class^="banner-"],
+      [id*="advertisement"], [class*="advertisement"],
+      [id*="sponsored"], [class*="sponsored"],
+      [href*="/ad.php"], [href*="/click.php?ad="],
+      
+      /* Google Ads & Specific Ad Networks */
+      ins.adsbygoogle, .adsbygoogle,
       [id^="google_ads_"],
       [id^="div-gpt-ad"],
-      [data-ad-slot],
-      [data-ad-client] {
+      [data-ad-slot], [data-ad-client],
+      div[id*="GoogleActiveViewElement"] {
+        display: none !important;
         position: absolute !important;
         left: -10000px !important;
         top: -10000px !important;

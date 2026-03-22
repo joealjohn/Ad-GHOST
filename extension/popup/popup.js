@@ -80,17 +80,29 @@ toggleSwitch.addEventListener('click', () => {
 // Pause Button
 pauseSiteBtn.addEventListener('click', () => {
   if (!currentDomain) return;
+  
+  // Immediate visual feedback
+  pauseSiteBtn.style.opacity = '0.5';
+  pauseSiteBtn.style.pointerEvents = 'none';
+
   chrome.runtime.sendMessage({ type: 'TOGGLE_SITE_PAUSE', domain: currentDomain }, (response) => {
+    if (chrome.runtime.lastError) {
+      pauseSiteBtn.style.opacity = '1';
+      pauseSiteBtn.style.pointerEvents = '';
+      return;
+    }
     if (response) {
       isPaused = response.pausedSites.includes(currentDomain);
       updatePauseBtn(isPaused);
       
-      // Auto-reload the active tab to apply changes
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]) {
-          chrome.tabs.reload(tabs[0].id);
-        }
-      });
+      // Short delay so the user sees the button change before tab reloads (which closes popup)
+      setTimeout(() => {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]) {
+            chrome.tabs.reload(tabs[0].id);
+          }
+        });
+      }, 300);
     }
   });
 });

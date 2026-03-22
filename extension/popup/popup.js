@@ -113,14 +113,14 @@ function updateMainToggle(active) {
     toggleThumb.classList.add('active');
     appHeading.classList.add('active');
     protectionMsg.classList.add('active');
-    connectionLabel.textContent = 'Connected';
+    connectionLabel.textContent = 'Enabled';
     protectionMsg.innerHTML = 'Your browser is <strong>protected</strong>';
   } else {
     toggleTrack.classList.remove('active');
     toggleThumb.classList.remove('active');
     appHeading.classList.remove('active');
     protectionMsg.classList.remove('active');
-    connectionLabel.textContent = 'Disconnected';
+    connectionLabel.textContent = 'Disabled';
     protectionMsg.innerHTML = 'Your browser is <strong>not protected</strong>';
   }
 }

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "AdGuard",
+  "name": "Ghost Ad Blocker",
   "version": "1.0.0",
   "description": "Block ads on YouTube and your  sites for free.",
   "permissions": [
@@ -16,7 +16,7 @@
   },
   "action": {
     "default_popup": "popup/popup.html",
-    "default_title": "AdGuard - Ad Blocker",
+    "default_title": "Ghost Ad Blocker",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

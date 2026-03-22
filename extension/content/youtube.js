@@ -103,15 +103,18 @@
       });
     }
 
-    // 2. Experimental Instant-Warp Protocol (No Playback Delay)
+    // 2. Precision Ad Scrubbing (Prevents Main Video Buffer Hangs)
     const player = document.querySelector('.html5-video-player');
     if (player && player.classList.contains('ad-showing')) {
       const video = document.querySelector('video');
       
       if (video && !isNaN(video.duration) && video.duration > 0) {
-        // Boom! Instantly teleport the timeline to the exact final millisecond 
-        // of the ad, ignoring the 0.5s safety margin!
-        video.currentTime = video.duration;
+        // We leave 0.5 seconds remaining and let it fast-forward physically 
+        // through the final frames. This forces YouTube's internal engine to register 
+        // the 'ended' event legally, ensuring the main video loads immediately without freezing!
+        if (video.currentTime < video.duration - 1) {
+            video.currentTime = video.duration - 0.5;
+        }
         
         video.muted = true;
         try { video.playbackRate = 16; } catch {}

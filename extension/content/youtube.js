@@ -7,7 +7,31 @@
 (function() {
   'use strict';
 
-  let enabled = true;
+  // Inject CSS to hide all cosmetic/feed ads on YouTube instantly
+  function injectCosmeticCSS() {
+    if (document.getElementById('adguard-yt-cosmetic')) return;
+    const style = document.createElement('style');
+    style.id = 'adguard-yt-cosmetic';
+    // Deep selectors for homepage promoted posts, search ads, and banners
+    style.textContent = `
+      ytd-rich-item-renderer:has(.ytd-ad-slot-renderer),
+      ytd-rich-item-renderer:has(ytd-ad-slot-renderer),
+      ytd-rich-item-renderer:has(ytd-in-feed-ad-layout-renderer),
+      ytd-in-feed-ad-layout-renderer,
+      ytd-ad-slot-renderer,
+      ytd-search-pyv-renderer,
+      ytd-promoted-sparkles-web-renderer,
+      ytd-promoted-sparkles-text-search-renderer,
+      #masthead-ad,
+      ytd-banner-promo-renderer,
+      ytd-statement-banner-renderer,
+      .ytd-promoted-video-renderer,
+      .ytd-promoted-sparkles-web-renderer {
+        display: none !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
 
   // Listen for state changes
   try {
@@ -18,11 +42,19 @@
       const isPaused = pausedSites.includes(location.hostname);
       if (state) enabled = state.enabled;
       if (!enabled || isPaused) enabled = false;
+      
+      if (enabled) injectCosmeticCSS();
     });
 
     chrome.runtime.onMessage.addListener((msg) => {
       if (msg.type === 'STATE_CHANGED') {
         enabled = msg.enabled;
+        if (enabled) {
+          injectCosmeticCSS();
+        } else {
+          const style = document.getElementById('adguard-yt-cosmetic');
+          if (style) style.remove();
+        }
       }
     });
   } catch {}

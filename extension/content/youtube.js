@@ -53,11 +53,15 @@
     if (!player) return;
 
     const adShowing = player.classList.contains('ad-showing');
+    
+    // Make absolutely sure it's an ad. Just checking generic 'children' is dangerous
+    // because YouTube sometimes puts hidden metadata divs in the ad container.
     const adContainer = document.querySelector('.video-ads');
-    const hasAdChildren = adContainer && adContainer.children.length > 0;
+    const hasAdModule = adContainer && adContainer.querySelector('.ytp-ad-module, .ytp-ad-player-overlay, .ytp-ad-text, .ytp-ad-message') !== null;
+    
     const isAdContent = window.location.href.includes('adformat=');
 
-    const isAd = adShowing || hasAdChildren || isAdContent;
+    const isAd = adShowing || hasAdModule || isAdContent;
 
     // Grab ALL video elements (sometimes YouTube uses dual-video layers for ads)
     const videos = document.querySelectorAll('video');

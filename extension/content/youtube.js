@@ -18,16 +18,18 @@ window.addEventListener('message', function (event) {
     try {
       if (!chrome.runtime?.id) return;
       chrome.storage.local.get([key], function (result) {
-        if (chrome.runtime.lastError) return;
-        let count = result[key] || 0;
+        try {
+          if (chrome.runtime.lastError) return;
+          let count = result[key] || 0;
 
-        if (count < MAX_COUNT) {
-          count++;
-          chrome.storage.local.set({ [key]: count }, function () {});
-          try {
-            chrome.runtime.sendMessage({ type: 'AD_BLOCKED' }).catch(() => {});
-          } catch (e) {}
-        }
+          if (count < MAX_COUNT) {
+            count++;
+            chrome.storage.local.set({ [key]: count }, function () {});
+            try {
+              chrome.runtime.sendMessage({ type: 'AD_BLOCKED' }).catch(() => {});
+            } catch (e) {}
+          }
+        } catch(err) {}
       });
     } catch (e) {}
   }
@@ -55,8 +57,9 @@ injectScript('content/adshield-utils.js');
 try {
   if (!chrome.runtime?.id) throw new Error();
   chrome.storage.local.get(['state', 'pausedSites', 'ghostDisableFlag'], function (result) {
-    if (chrome.runtime.lastError) return;
-    const isEnabled = result.state ? result.state.enabled : true;
+    try {
+      if (chrome.runtime.lastError) return;
+      const isEnabled = result.state ? result.state.enabled : true;
   const pausedSites = result.pausedSites || [];
   const isPaused = pausedSites.includes(location.hostname);
 
@@ -111,10 +114,12 @@ try {
         try {
           if (chrome.runtime?.id) {
             chrome.storage.local.get(['adBlockCount'], function (result) {
-              if (chrome.runtime.lastError) return;
-              let count = result.adBlockCount || 0;
-              count++;
-              chrome.storage.local.set({ adBlockCount: count }, function () {});
+              try {
+                if (chrome.runtime.lastError) return;
+                let count = result.adBlockCount || 0;
+                count++;
+                chrome.storage.local.set({ adBlockCount: count }, function () {});
+              } catch(err) {}
             });
           }
         } catch (e) {}
@@ -182,8 +187,10 @@ try {
                   try {
                     if (chrome.runtime?.id) {
                       chrome.runtime.sendMessage({ action: "clickRefreshPage" }, (response) => {
-                        if (chrome.runtime.lastError) return;
-                        if (response && response.success && iframe) iframe.style.visibility = "hidden";
+                        try {
+                          if (chrome.runtime.lastError) return;
+                          if (response && response.success && iframe) iframe.style.visibility = "hidden";
+                        } catch(err) {}
                       });
                     }
                   } catch (e) {}
@@ -213,5 +220,6 @@ try {
       appendStyle();
     }
   }
+  } catch(err) {} 
 });
 } catch (e) {}
